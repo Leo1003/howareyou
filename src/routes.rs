@@ -1,19 +1,18 @@
-use std::convert::Infallible;
-use std::net::SocketAddr;
-
-use anyhow::Result as AnyResult;
 use futures::{FutureExt, StreamExt};
-use warp::hyper::{HeaderMap, StatusCode};
-use warp::reply::with_status;
+use std::convert::Infallible;
+use warp::hyper::StatusCode;
+use warp::reply::{json, with_status};
 use warp::ws::Ws;
 use warp::Reply;
 
-pub async fn root(remote_addr: Option<SocketAddr>, headers: HeaderMap) -> Result<impl Reply, Infallible> {
-    Ok(String::new())
+use crate::data::ClientInfo;
+
+pub async fn root(client_info: ClientInfo) -> Result<impl Reply, Infallible> {
+    Ok(format!("{}", &client_info))
 }
 
-pub async fn api(remote_addr: Option<SocketAddr>, headers: HeaderMap) -> Result<impl Reply, Infallible> {
-    Ok(String::new())
+pub async fn api(client_info: ClientInfo) -> Result<impl Reply, Infallible> {
+    Ok(json(&client_info))
 }
 
 pub fn health() -> impl Reply {
@@ -28,6 +27,7 @@ pub fn ws(ws: Ws) -> impl Reply {
             if let Err(e) = result {
                 error!("websocket error: {:?}", e);
             }
+            debug!("Websocket connection closed");
         })
     })
 }

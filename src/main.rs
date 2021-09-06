@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use tokio::runtime::Builder as RuntimeBuilder;
 use warp::{Filter, Rejection};
 
+mod data;
 mod routes;
 
 fn main() -> Result<()> {
@@ -45,26 +46,26 @@ fn main() -> Result<()> {
 }
 
 async fn bootstrap() -> Result<()> {
-    let root = warp::path::end()
-        .and(warp::filters::addr::remote())
-        .and(warp::header::headers_cloned())
-        .and_then(routes::root)
-        .with(warp::wrap_fn(wait_wrapper));
-    let api = warp::path("api")
-        .and(warp::filters::addr::remote())
-        .and(warp::header::headers_cloned())
-        .and_then(routes::api)
-        .with(warp::wrap_fn(wait_wrapper));
+    let root = warp::path::end().and(
+        data::client_info()
+            .and_then(routes::root)
+            .with(warp::wrap_fn(wait_wrapper)),
+    );
+    let api = warp::path("api").and(
+        data::client_info()
+            .and_then(routes::api)
+            .with(warp::wrap_fn(wait_wrapper)),
+    );
     let ws = warp::path("ws").and(warp::ws()).map(routes::ws);
     let health = warp::path("health")
         .and(warp::get().or(warp::head()).unify())
         .map(routes::health);
 
-    let router = root   // GET /
-        .or(api)        // GET /api
-        .or(health)     // GET /health
-        .or(ws)         // GET /ws
-        ;
+    let router = root // GET /
+        .or(api) // GET /api
+        .or(health) // GET /health
+        .or(ws) // GET /ws
+        .with(warp::log("howareyou"));
 
     warp::serve(router).run(([127, 0, 0, 1], 8080)).await;
     Ok(())
