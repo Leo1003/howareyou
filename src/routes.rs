@@ -21,6 +21,7 @@ pub fn health() -> impl Reply {
 
 pub fn ws(ws: Ws) -> impl Reply {
     ws.on_upgrade(|ws| {
+        info!("New Websocket connection created!");
         // Pipe the message back
         let (tx, rx) = ws.split();
         rx.forward(tx).map(|result| {

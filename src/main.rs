@@ -5,26 +5,37 @@ extern crate log;
 #[macro_use]
 extern crate serde;
 
-use std::{convert::Infallible, time::Duration};
+use std::{
+    convert::Infallible,
+    env,
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result as AnyhowResult};
+use dotenv::dotenv;
 use tokio::runtime::Builder as RuntimeBuilder;
 use warp::{Filter, Rejection};
 
 mod data;
 mod routes;
 
-fn main() -> Result<()> {
+fn main() -> AnyhowResult<()> {
+    dotenv().ok();
+    if env::var_os("RUST_LOG").is_none() {
+        env::set_var("RUST_LOG", "info");
+    }
+
     env_logger::init();
 
-    let rt_type = dotenv::var("RUNTIME_TYPE")
-        .unwrap_or_else(|_| "multithread".to_owned());
+    let rt_type =
+        env::var("RUNTIME_TYPE").unwrap_or_else(|_| "multithread".to_owned());
 
     let rt = match rt_type.as_str() {
         "multithread" | "multi_thread" => {
             let mut builder = RuntimeBuilder::new_multi_thread();
 
-            let worker_cnt = dotenv::var("RUNTIME_WORKERS")
+            let worker_cnt = env::var("RUNTIME_WORKERS")
                 .ok()
                 .map(|var| var.parse::<usize>())
                 .transpose()
@@ -42,10 +53,10 @@ fn main() -> Result<()> {
         _ => bail!("Invalid RUNTIME_TYPE variable"),
     };
 
-    rt.block_on(bootstrap())
+    rt.block_on(launch_server())
 }
 
-async fn bootstrap() -> Result<()> {
+async fn launch_server() -> AnyhowResult<()> {
     let root = warp::path::end().and(
         data::client_info()
             .and_then(routes::root)
@@ -67,7 +78,21 @@ async fn bootstrap() -> Result<()> {
         .or(ws) // GET /ws
         .with(warp::log("howareyou"));
 
-    warp::serve(router).run(([127, 0, 0, 1], 8080)).await;
+    let addr = env::var("APP_ADDRESS")
+        .ok()
+        .map(|var| var.parse::<IpAddr>())
+        .transpose()
+        .with_context(|| "invalid APP_ADDRESS variable")?
+        .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+    let port = env::var("APP_PORT")
+        .ok()
+        .map(|var| var.parse::<u16>())
+        .transpose()
+        .with_context(|| "invalid APP_PORT variable")?
+        .unwrap_or(8080);
+
+    info!("Listening on {}:{}", addr, port);
+    warp::serve(router).run((addr, port)).await;
     Ok(())
 }
 
