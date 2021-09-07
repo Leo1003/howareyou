@@ -2,10 +2,12 @@ use std::{
     fmt::{Display, Formatter},
     net::{IpAddr, SocketAddr},
 };
-use warp::{filters::header, Filter, Rejection};
+use warp::{filters::header, hyper::Method, Filter, Rejection};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClientInfo {
+    #[serde(with = "http_method")]
+    pub method: Method,
     pub host: Option<String>,
     pub client_ip: IpAddr,
     pub forwarded_for: Vec<IpAddr>,
@@ -15,14 +17,16 @@ pub struct ClientInfo {
 
 pub fn client_info(
 ) -> impl Filter<Extract = (ClientInfo,), Error = Rejection> + Clone {
-    header::optional::<String>("HOST")
+    warp::method()
+        .and(header::optional::<String>("HOST"))
         .and(header::optional::<String>("X-FORWARDED-FOR"))
         .and(header::optional::<IpAddr>("X-REAL-IP"))
         .and(header::optional::<String>("REFERER"))
         .and(header::optional::<String>("USER-AGENT"))
         .and(warp::filters::addr::remote())
         .map(
-            |host: Option<String>,
+            |method: Method,
+             host: Option<String>,
              x_forwarded_for: Option<String>,
              x_real_ip: Option<IpAddr>,
              referer: Option<String>,
@@ -43,6 +47,7 @@ pub fn client_info(
                     .unwrap_or_else(|| remote_addr.unwrap().ip());
 
                 ClientInfo {
+                    method,
                     host,
                     client_ip,
                     forwarded_for,
@@ -55,6 +60,7 @@ pub fn client_info(
 
 impl Display for ClientInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Method: {}", self.method)?;
         if let Some(host) = &self.host {
             writeln!(f, "Host: {}", host)?;
         }
@@ -75,5 +81,28 @@ impl Display for ClientInfo {
         }
 
         Ok(())
+    }
+}
+
+mod http_method {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use warp::hyper::Method;
+
+    pub fn serialize<S>(
+        method: &Method,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(method.as_str())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Method, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Method::from_bytes(s.as_bytes()).map_err(serde::de::Error::custom)
     }
 }
