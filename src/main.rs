@@ -14,11 +14,16 @@ use std::{
 
 use anyhow::{Context, Result as AnyhowResult};
 use dotenv::dotenv;
+use once_cell::sync::Lazy;
 use tokio::runtime::Builder as RuntimeBuilder;
 use warp::{Filter, Rejection};
 
 mod data;
 mod routes;
+
+static HOSTNAME: Lazy<String> = Lazy::new(|| {
+    hostname::get().expect("Failed to get hostname").to_string_lossy().into_owned()
+});
 
 fn main() -> AnyhowResult<()> {
     dotenv().ok();
@@ -27,6 +32,8 @@ fn main() -> AnyhowResult<()> {
     }
 
     env_logger::init();
+
+    info!("Got hostname: {}", *HOSTNAME);
 
     let rt_type =
         env::var("RUNTIME_TYPE").unwrap_or_else(|_| "multithread".to_owned());

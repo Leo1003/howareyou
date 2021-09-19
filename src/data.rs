@@ -1,3 +1,4 @@
+use crate::HOSTNAME;
 use std::{
     fmt::{Display, Formatter},
     net::{IpAddr, SocketAddr},
@@ -6,6 +7,7 @@ use warp::{filters::header, hyper::Method, Filter, Rejection};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ClientInfo {
+    pub hostname: &'static str,
     #[serde(with = "http_method")]
     pub method: Method,
     pub host: Option<String>,
@@ -47,6 +49,7 @@ pub fn client_info(
                     .unwrap_or_else(|| remote_addr.unwrap().ip());
 
                 ClientInfo {
+                    hostname: &*HOSTNAME,
                     method,
                     host,
                     client_ip,
@@ -60,6 +63,7 @@ pub fn client_info(
 
 impl Display for ClientInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Server hostname: {}", self.hostname)?;
         writeln!(f, "Method: {}", self.method)?;
         if let Some(host) = &self.host {
             writeln!(f, "Host: {}", host)?;
